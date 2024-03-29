@@ -5,35 +5,35 @@
 
 Run Calculon like this:
 ``` sh
-$> PYTHONPATH=. ./bin/ <args>
+$> PYTHONPATH=. ./bin/calculon <args>
 ```
 
 Calculon is a hierarchical command line. To see the commands it accepts, use `--help` or `-h`:
 ``` sh
-$> PYTHONPATH=. ./bin/ -h
+$> PYTHONPATH=. ./bin/calculon -h
 ```
 
 You can also see how to use any command specifically by using `--help` or `-h` on the command:
 ``` sh
-$> PYTHONPATH=. ./bin/ llm -h
+$> PYTHONPATH=. ./bin/calculon llm -h
 ```
 
 ## LLM Example
 
 Run a single calculation for LLM (~1 sec):
 ``` sh
-$> PYTHONPATH=. ./bin/ llm models/megatron-1T.json examples/3072_t4_p64_d12_mbs4_full.json systems/a100_80g.json -
+$> PYTHONPATH=. ./bin/calculon llm models/megatron-1T.json examples/3072_t4_p64_d12_mbs4_full.json systems/a100_80g.json -
 ```
 
 Run a system execution optimizer for LLM (~1 min):
 ``` sh
-$> PYTHONPATH=. ./bin/ llm-optimal-execution models/turing-530B.json 5128 2520 float16 systems/a100_80g.json output.json -m
+$> PYTHONPATH=. ./bin/calculon llm-optimal-execution models/turing-530B.json 5128 2520 float16 systems/a100_80g.json output.json -m
 ```
 `opt_exe.json` will contain the optimal way to run Turing-530B across 5128 A100 GPUs.
 
 To store results from all successful runs from the same experiment, run a special system optimizer (~1 min):
 ``` sh
-$> PYTHONPATH=. ./bin/ llm-all-executions models/turing-530B.json 5128 2520 float16 systems/a100_80g.json all_output.csv
+$> PYTHONPATH=. ./bin/calculon llm-all-executions models/turing-530B.json 5128 2520 float16 systems/a100_80g.json all_output.csv
 ```
 
 ## Testing and validation (optional)
