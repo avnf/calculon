@@ -17,6 +17,7 @@
 
 from calculon import *
 from .layers import *
+import warnings
 
 
 class Llm:
@@ -89,6 +90,10 @@ class Llm:
       assert self.data_par > 0
       assert self.num_procs == self.tensor_par * self.pipeline_par * \
         self.data_par, 'tensor * pipeline * data parallelism != num_procs'
+      if not self.training and self.data_par > 1:
+        warnings.warn("Turning off data parallelism for inference and adjusting num_procs")
+        self.num_procs = int(self.num_procs / self.data_par)
+        self.data_par = 1
       self.tensor_par_net = tensor_par_net
       self.pipeline_par_net = pipeline_par_net
       self.data_par_net = data_par_net
@@ -106,8 +111,9 @@ class Llm:
       assert self.attention_type in ['multihead', 'multiquery']
       self.activation_recompute = activation_recompute
       assert self.activation_recompute in ['full', 'attn_only', 'none']
-      if self.activation_recompute in ['full', 'attn_only']:
-        assert self.training, "We only perform recompute during training"
+      if not self.training and self.activation_recompute in ['full', 'attn_only']:
+        warnings.warn("We only perform recompute during training, turning off")
+        self.activation_recompute = 'none'
       self.pipeline_interleaving = pipeline_interleaving
       assert self.pipeline_interleaving > 0, \
         f'Bad pipeline interleaving of {self.pipeline_interleaving}'
@@ -115,6 +121,9 @@ class Llm:
         assert self.pipeline_interleaving == 1, \
         f'Bad pipeline interleaving of {self.pipeline_interleaving} with PP=1'
       self.optimizer_sharding = optimizer_sharding
+      if not self.training and self.optimizer_sharding:
+        warnings.warn("We only perform optimizer sharding during training, turning off")
+        self.optimizer_sharding = False
       if self.optimizer_sharding:
         assert self.data_par > 1, "We perform optimizer sharding with DP > 1"
       self.tensor_par_comm_type = tensor_par_comm_type
@@ -134,15 +143,17 @@ class Llm:
       self._pipeline_par_rs_ag = \
         self.tensor_par_comm_type in ['p2p_rs_ag', 'rs_ag']
       self.data_par_overlap = data_par_overlap
+      if not self.training and self.data_par_overlap:
+        warnings.warn("We only perform DP comm overlap during training, turning off")
+        self.data_par_overlap = False
       if self.data_par_overlap:
-        assert self.training, "We only perform DP comm overlap during training"
         assert self.data_par > 1, "We perform DP comm overlap with DP > 1"
       self.weight_offload = weight_offload
       self.activations_offload = activations_offload
       self.optimizer_offload = optimizer_offload
-      if self.optimizer_offload:
-        assert self.training, \
-          "We only perform optimizer offloading during training"
+      if not self.training and self.optimizer_offload:
+        warnings.warn("We only perform optimizer offloading during training")
+        self.optimizer_offload = False
 
     def get_json(self):
       keys = Llm.Execution.fields()

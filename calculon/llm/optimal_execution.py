@@ -68,6 +68,8 @@ class OptimalExecution(calculon.CommandLine):
                     help='Don\'t allow TP overlap')
     sp.add_argument('--no-dp-overlap', action='store_true',
                     help='Don\'t allow DP overlap')
+    sp.add_argument('--inference-only', action='store_true',
+                    help='Optimize for inference')
 
   @staticmethod
   def run_command(logger, args):
@@ -76,25 +78,25 @@ class OptimalExecution(calculon.CommandLine):
     app = Llm.Application(calculon.io.read_json_file(args.application))
     syst = System(calculon.io.read_json_file(args.system))
 
-    params = []
+    params = [] 
     for tp in Llm.get_all_tensor_parallelisms(
         args.num_procs, app.hidden, app.attn_heads):
       for pp in Llm.get_all_pipeline_parallelisms(
           args.num_procs, tp, app.num_blocks):
-        dp = Llm.get_data_parallelism(args.num_procs, tp, pp)
+        dp = pick(args.inference_only, 1, Llm.get_data_parallelism(args.num_procs, tp, pp))
         for ppint in Llm.get_valid_pipeline_interleavings(app.num_blocks, pp):
           batch_size = OptimalExecution.get_batch_size(dp, args.max_batch_size)
           if batch_size is None:
             continue
-          for activation_recompute in ['full', 'attn_only', 'none']:
+          for activation_recompute in pick(args.inference_only, ['none'], ['full', 'attn_only', 'none']):
             for optimizer_sharding in pick(dp>1, [True, False], [False]):
               for tensor_par_comm_type in ['ar', 'p2p_rs_ag', 'rs_ag']:
                 params.append(
-                  (args.debug, args.top_n, args.layers, args.num_procs,
+                  (args.debug, args.top_n, args.layers, pp*tp*dp,
                    args.max_batch_size, args.datatype, app, syst, tp, pp, dp,
                    ppint, batch_size, activation_recompute, optimizer_sharding,
                    tensor_par_comm_type, args.fused_activation, args.mbs_break,
-                   not args.no_tp_overlap, not args.no_dp_overlap))
+                   not args.no_tp_overlap, not args.no_dp_overlap, args.inference_only))
 
     # Runs parallel searches
     start_time = datetime.datetime.now()
@@ -176,7 +178,7 @@ class OptimalExecution(calculon.CommandLine):
   def search(debug, top_n, layers, num_procs, max_batch_size, datatype,
              app, syst, tp, pp, dp, ppint, batch_size, activation_recompute,
              optimizer_sharding, tensor_par_comm_type, fused_acts, mbs_break,
-             allow_tp_overlap, allow_dp_overlap):
+             allow_tp_overlap, allow_dp_overlap, inference_only):
     num_nets = syst.num_networks
 
     best = []
@@ -193,13 +195,13 @@ class OptimalExecution(calculon.CommandLine):
                                    [False]):
         for tensor_par_overlap in pick(tp>1 and allow_tp_overlap,
                                        ['none', 'ring', 'pipe'], ['none']):
-          for weight_offload in pick(has_mem2, [True, False], [False]):
-            if activation_recompute == 'full' or not has_mem2:
+          for weight_offload in pick(has_mem2 and not inference_only, [True, False], [False]):
+            if activation_recompute == 'full' or not has_mem2 or inference_only:
               activations_offloads = [False]
             else:
               activations_offloads = [True, False]
             for activations_offload in activations_offloads:
-              for optimizer_offload in pick(has_mem2, [True, False],
+              for optimizer_offload in pick(has_mem2 and not inference_only, [True, False],
                                             [False]):
                 for fused_act in fused_acts:
                   for microbatch_size in Llm.get_valid_microbatch_sizes(
@@ -232,7 +234,7 @@ class OptimalExecution(calculon.CommandLine):
                             'weight_offload': weight_offload,
                             'activations_offload': activations_offload,
                             'optimizer_offload': optimizer_offload,
-                            'training': True
+                            'training': not inference_only
                           }
 
                           if not debug:
